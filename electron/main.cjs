@@ -130,7 +130,6 @@ function createWindow() {
   } else {
     // In production, load the index.html from the dist folder
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-    mainWindow.webContents.openDevTools();
   }
 }
 
