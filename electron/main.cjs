@@ -6,8 +6,8 @@ const fs = require('fs');
 if (process.platform === 'darwin') {
   app.name = 'Scriptly';
   try {
-    // 開發者模式下，使用 png 預覽，因為 Chromium 不支援直接將 .icon 資料夾顯示在 Dock 上
-    app.dock.setIcon(path.join(__dirname, '../public/icon.png'));
+    // 開發者模式下，使用帶有齒輪的專屬開發版 icon
+    app.dock.setIcon(path.join(__dirname, '../public/icon-dev.png'));
   } catch (e) {
     console.warn("Electron native load image warning:", e);
   }
@@ -100,7 +100,7 @@ function createWindow() {
     height: 800,
     titleBarStyle: 'hidden',
     title: "Scriptly - 未命名劇本",
-    icon: path.join(__dirname, '../public/icon.png'),
+    icon: path.join(__dirname, '../public/icon-dev.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
