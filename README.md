@@ -2,10 +2,6 @@
   <img src="public/icon-iOS-Default-1024@1x.png" width="120" height="120" alt="Scriptly Logo" />
   <h1>Scriptly</h1>
   <p><strong>專為華語創作者打造的現代化劇本編輯器</strong></p>
-  
-  <a href="https://github.com/sutimlong/Scriptly/releases">
-    <img src="https://img.shields.io/github/v/release/sutimlong/Scriptly?color=ef4444&label=%E4%B8%8B%E8%BC%89%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&style=for-the-badge" alt="Latest Release" />
-  </a>
 </div>
 
 <br />
