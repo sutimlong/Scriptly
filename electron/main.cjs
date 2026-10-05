@@ -6,10 +6,12 @@ const fs = require('fs');
 if (process.platform === 'darwin') {
   app.name = 'Scriptly';
   try {
-    // 開發者模式下，使用帶有齒輪的專屬開發版 icon
-    const devIconPath = path.join(__dirname, '../public/icon-dev.png');
-    const image = nativeImage.createFromPath(devIconPath);
-    app.dock.setIcon(image);
+    if (!app.isPackaged) {
+      // 開發者模式下，使用帶有齒輪的專屬開發版 icon
+      const devIconPath = path.join(__dirname, '../public/icon-dev.png');
+      const image = nativeImage.createFromPath(devIconPath);
+      app.dock.setIcon(image);
+    }
   } catch (e) {
     console.warn("Electron native load image warning:", e);
   }
@@ -96,16 +98,18 @@ ipcMain.handle('show-save-dialog', async (event, options) => {
 });
 
 function createWindow() {
-
-  const devIconPath = path.join(__dirname, '../public/icon-dev.png');
-  const image = nativeImage.createFromPath(devIconPath);
+  let windowIcon;
+  if (!app.isPackaged) {
+    const devIconPath = path.join(__dirname, '../public/icon-dev.png');
+    windowIcon = nativeImage.createFromPath(devIconPath);
+  }
 
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     titleBarStyle: 'hidden',
     title: "Scriptly - 未命名劇本",
-    icon: image,
+    icon: windowIcon,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
