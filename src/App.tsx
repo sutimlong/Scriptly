@@ -207,8 +207,12 @@ function App() {
         if (res.ok) {
           const data = await res.json();
           const latestVersion = data.tag_name;
+          const ignoredVersion = localStorage.getItem('scriptly-ignored-version');
+          
           if (latestVersion && latestVersion !== CURRENT_VERSION && latestVersion.startsWith('v')) {
-            setUpdateAvailable(latestVersion);
+            if (latestVersion !== ignoredVersion) {
+              setUpdateAvailable(latestVersion);
+            }
           }
         }
       } catch (e) {
@@ -1277,7 +1281,12 @@ function App() {
                   立即前往更新
                 </button>
                 <button 
-                  onClick={() => setUpdateAvailable(null)}
+                  onClick={() => {
+                    if (updateAvailable) {
+                      localStorage.setItem('scriptly-ignored-version', updateAvailable);
+                    }
+                    setUpdateAvailable(null);
+                  }}
                   className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 rounded-lg transition-colors cursor-pointer"
                 >
                   暫時不要
