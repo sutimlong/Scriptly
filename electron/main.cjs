@@ -2,6 +2,11 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// 設定應用程式名稱 (在 Dock 上顯示的名稱)
+if (process.platform === 'darwin') {
+  app.name = 'Scriptly';
+}
+
 ipcMain.handle('export-pdf', async (event, title, htmlContent) => {
   return new Promise((resolve) => {
     const tempHtmlPath = path.join(app.getPath('temp'), 'temp-pdf.html');
