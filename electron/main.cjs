@@ -89,6 +89,7 @@ function createWindow() {
     height: 800,
     titleBarStyle: 'hidden',
     title: "Scriptly - 未命名劇本",
+    icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -118,6 +119,11 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  // Set dock icon for macOS during development
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(path.join(__dirname, '../public/icon.png'));
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
