@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/icon-dev.png" width="120" height="120" alt="Scriptly Logo" />
+  <img src="public/icon-iOS-Default-1024@1x.png" width="120" height="120" alt="Scriptly Logo" />
   <h1>Scriptly</h1>
   <p><strong>專為華語創作者打造的現代化劇本編輯器</strong></p>
   
