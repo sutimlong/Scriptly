@@ -136,10 +136,6 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  // Set dock icon for macOS during development
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, '../public/icon.png'));
-  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
