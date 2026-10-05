@@ -5,6 +5,11 @@ const fs = require('fs');
 // 設定應用程式名稱 (在 Dock 上顯示的名稱)
 if (process.platform === 'darwin') {
   app.name = 'Scriptly';
+  try {
+    app.dock.setIcon(path.join(__dirname, '../public/icon.icon'));
+  } catch (e) {
+    console.warn("Electron native load image warning:", e);
+  }
 }
 
 ipcMain.handle('export-pdf', async (event, title, htmlContent) => {
@@ -94,7 +99,7 @@ function createWindow() {
     height: 800,
     titleBarStyle: 'hidden',
     title: "Scriptly - 未命名劇本",
-    icon: path.join(__dirname, '../public/icon.png'),
+    icon: path.join(__dirname, '../public/icon.icon'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
