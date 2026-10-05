@@ -1135,7 +1135,9 @@ export const ScriptEditor = ({
 
         {/* Shortcuts Info Dialog */}
         {showShortcutsInfo && (
-          <div style={{
+          <div 
+            onClick={() => setShowShortcutsInfo(false)}
+            style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1144,7 +1146,9 @@ export const ScriptEditor = ({
             justifyContent: 'center',
             zIndex: 999999,
           }}>
-            <div style={{
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{
               background: 'white',
               padding: '32px',
               borderRadius: '12px',
@@ -1186,7 +1190,9 @@ export const ScriptEditor = ({
 
         {/* Format Info Dialog */}
         {showFormatInfo && (
-          <div style={{
+          <div 
+            onClick={() => setShowFormatInfo(false)}
+            style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1195,7 +1201,9 @@ export const ScriptEditor = ({
             justifyContent: 'center',
             zIndex: 999999,
           }}>
-            <div style={{
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{
               background: 'white',
               padding: '32px',
               borderRadius: '12px',
