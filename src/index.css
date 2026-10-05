@@ -1,0 +1,71 @@
+:root {
+  --bg-color: #fcfcfc;
+  --text-color: #111111;
+  --primary: #111111;
+  --primary-hover: #000000;
+  --border-color: #e5e5e5;
+  --card-bg: #ffffff;
+  --muted-text: #666666;
+  --success: #10b981;
+}
+
+@font-face {
+  font-family: 'MOEKai';
+  src: url('./assets/fonts/edukai.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MOESong';
+  src: url('./assets/fonts/edusong.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MOELiSu';
+  src: url('./assets/fonts/edulisu.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans TC';
+  src: url('./assets/fonts/notosans.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
