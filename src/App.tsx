@@ -322,9 +322,7 @@ function App() {
         const result = await ipcRenderer.invoke('show-save-dialog', {
           defaultPath: defaultName,
           filters: [
-            { name: 'Scriptly 檔案', extensions: ['sly'] },
-            { name: 'JSON 檔案', extensions: ['json'] },
-            { name: '所有檔案', extensions: ['*'] }
+            { name: 'Scriptly 檔案', extensions: ['sly'] }
           ]
         });
         if (result.canceled || !result.filePath) {
