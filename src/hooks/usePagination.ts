@@ -122,7 +122,7 @@ export function usePagination(
     }
 
     setPageCount(pages);
-  });
+  }, [editor, zoom, wrapperRef]);
 
   useEffect(() => {
     const el = scrollRef.current;

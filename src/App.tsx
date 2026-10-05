@@ -159,7 +159,7 @@ const Accordion = ({ q, a }: { q: string, a: string }) => {
             className="accordion-content"
           >
             <div className="accordion-inner">
-              {a.split('\n').map((line, i) => (
+              {a.split('\\n').map((line, i) => (
                 <p key={i}>{line}</p>
               ))}
             </div>
@@ -201,7 +201,7 @@ function App() {
       if (stored) {
         const parsed: RecentFile[] = JSON.parse(stored);
         
-        const fs = typeof window !== 'undefined' && (window as any).require ? (window as any).require('fs') : null;
+        const fs = typeof window !== 'undefined' && (window as any).electronAPI ? (window as any).electronAPI.fs : null;
         if (fs) {
           const existingFiles = parsed.filter(file => {
             try {
@@ -247,7 +247,7 @@ function App() {
 
   const handleOpenRecent = async (filePath: string) => {
     try {
-      const fs = typeof window !== 'undefined' && (window as any).require ? (window as any).require('fs') : null;
+      const fs = typeof window !== 'undefined' && (window as any).electronAPI ? (window as any).electronAPI.fs : null;
       if (!fs) {
         alert('此環境不支援直接開啟檔案，請使用「開啟舊檔」。');
         return;
@@ -283,7 +283,7 @@ function App() {
 
         setCurrentFileHandle(null);
         setCurrentFilePath(filePath);
-        addToRecentFiles(loadedState.scriptTitle ? `${loadedState.scriptTitle}.sly` : filePath.split(/[\/]/).pop() || '未知檔名', filePath);
+        addToRecentFiles(loadedState.scriptTitle ? `${loadedState.scriptTitle}.sly` : filePath.split(/[\\/]/).pop() || '未知檔名', filePath);
         
         setView('steps');
       } else {
@@ -302,7 +302,7 @@ function App() {
   const handleSave = async () => {
     try {
       const stateToSave = {
-        version: '1.0.0',
+        version: CURRENT_VERSION,
         scriptTitle,
         loglineText,
         synopsisMode,
@@ -321,9 +321,9 @@ function App() {
       const jsonString = JSON.stringify(stateToSave, null, 2);
       const defaultName = scriptTitle.trim() ? `${scriptTitle.trim()}.sly` : '未命名劇本.sly';
 
-      const electron = typeof window !== 'undefined' && (window as any).require ? (window as any).require('electron') : null;
+      const electron = typeof window !== 'undefined' && (window as any).electronAPI ? (window as any).electronAPI : null;
       const ipcRenderer = electron ? electron.ipcRenderer : null;
-      const fs = typeof window !== 'undefined' && (window as any).require ? (window as any).require('fs') : null;
+      const fs = typeof window !== 'undefined' && (window as any).electronAPI ? (window as any).electronAPI.fs : null;
 
       if (fs && currentFilePath && !currentFileHandle) {
         fs.writeFileSync(currentFilePath, jsonString, 'utf-8');
@@ -418,9 +418,9 @@ function App() {
 
   const handleOpen = async () => {
     try {
-      const electron = typeof window !== 'undefined' && (window as any).require ? (window as any).require('electron') : null;
+      const electron = typeof window !== 'undefined' && (window as any).electronAPI ? (window as any).electronAPI : null;
       const ipcRenderer = electron ? electron.ipcRenderer : null;
-      const fs = typeof window !== 'undefined' && (window as any).require ? (window as any).require('fs') : null;
+      const fs = typeof window !== 'undefined' && (window as any).electronAPI ? (window as any).electronAPI.fs : null;
 
       let loadedState;
       let filePath = '';
@@ -1056,7 +1056,7 @@ function App() {
                       maxLength={3000}
                     />
                     <div className="word-count" style={{ textAlign: 'right', fontSize: '0.8rem', color: '#666', marginTop: '8px', whiteSpace: 'nowrap', alignSelf: 'flex-end' }}>
-                      {freeSynopsis.length} / 3000 字
+                      {freeSynopsis.length} / 3000 字元
                     </div>
                   </div>
                 </div>
@@ -1195,6 +1195,7 @@ function App() {
             transition={{ duration: 0.5, ease: 'easeInOut' }}
           >
             <ScriptEditor 
+              fileName={scriptTitle}
               onBack={() => setView('steps')}
               content={scriptContent}
               onChange={setScriptContent}
@@ -1205,7 +1206,7 @@ function App() {
               onSave={handleSave}
               onAddSceneOutline={() => {
                 const newScene = {
-                  id: Math.random().toString(36).substr(2, 9),
+                  id: crypto.randomUUID(),
                   setting: '內景',
                   location: '',
                   time: '日',
@@ -1222,7 +1223,7 @@ function App() {
               }}
               onAddCharacter={() => {
                 const newChar = {
-                  id: Math.random().toString(36).substr(2, 9),
+                  id: crypto.randomUUID(),
                   name: '',
                   description: ''
                 };

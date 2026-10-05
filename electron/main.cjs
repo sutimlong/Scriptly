@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, nativeTheme, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -28,7 +28,9 @@ ipcMain.handle('export-pdf', async (event, title, htmlContent) => {
       height: 600,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true
+        contextIsolation: true,
+        sandbox: false,
+        preload: path.join(__dirname, 'preload.cjs')
       }
     });
 
@@ -40,7 +42,6 @@ ipcMain.handle('export-pdf', async (event, title, htmlContent) => {
           const data = await pdfWin.webContents.printToPDF({
             printBackground: true,
             pageSize: 'A4',
-            marginsType: 0,
             displayHeaderFooter: true,
             headerTemplate: '<div></div>', // Empty header
             footerTemplate: '<div style="width: 100%; text-align: center; font-size: 11px; font-family: serif; color: #666; padding-bottom: 5mm;">- <span class="pageNumber"></span> -</div>'
@@ -113,14 +114,16 @@ function createWindow() {
     show: true,
     backgroundColor: '#ffffff',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.cjs')
     }
   });
 
     mainWindow.maximize();
 
-  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+  mainWindow.webContents.on('console-message', (event, level, message) => {
     console.log(`[Browser Console]: ${message}`);
   });
 
@@ -140,7 +143,7 @@ app.whenReady().then(() => {
       callback(true);
       return;
     }
-    callback(true); // Allow other permissions by default for now
+    callback(false);
   });
 
   createWindow();

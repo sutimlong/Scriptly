@@ -88,7 +88,7 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ characters, 
 
   const addCharacter = () => {
     const newChar: Character = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       name: '',
       description: '',
       nicknames: []

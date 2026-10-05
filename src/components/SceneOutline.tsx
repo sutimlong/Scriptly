@@ -78,7 +78,7 @@ const Accordion = ({ q, a }: { q: string, a: string }) => {
 export const SceneOutline: React.FC<SceneOutlineProps> = ({ scenes, onChange, onBack, onComplete, onSaveDraft, hasScriptContent, onForward }) => {
   const addScene = () => {
     const newScene: Scene = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       setting: '內景',
       location: '',
       time: '日',

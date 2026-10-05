@@ -5,7 +5,8 @@ import { Slate, Editable, withReact, ReactEditor } from 'slate-react';
 import { withHistory } from 'slate-history';
 import { Editor, Transforms, Range, Point, Text, Path, Element as SlateElement } from 'slate';
 import { Element, Leaf } from './Elements';
-import { EditorToolbar, toggleBlock, toggleMark } from './Toolbar';
+import { EditorToolbar } from './Toolbar';
+import { toggleBlock, toggleMark } from './ToolbarUtils';
 import { HelpCircle, X, Save, Keyboard } from 'lucide-react';
 import type { Scene } from '../SceneOutline';
 import type { Character } from '../CharacterBuilder';
@@ -51,7 +52,8 @@ export const ScriptEditor = ({
   onAddSceneOutline,
   onAddCharacter,
   onGoToSceneOutline,
-  onGoToCharacter
+  onGoToCharacter,
+  fileName
 }: ScriptEditorProps) => {
   const editor = useMemo(() => {
     const e = withHistory(withReact(createEditor()));
@@ -302,8 +304,9 @@ export const ScriptEditor = ({
         </html>
       `;
 
-      const { ipcRenderer } = (window as any).require('electron');
-      const res = await ipcRenderer.invoke('export-pdf', '未命名劇本', fullHtml);
+      const { ipcRenderer } = (window as any).electronAPI || { ipcRenderer: null };
+      if (!ipcRenderer) throw new Error("electronAPI is not available");
+      const res = await ipcRenderer.invoke('export-pdf', fileName || '未命名劇本', fullHtml);
       if (!res.success && !res.cancelled) {
         alert(`輸出 PDF 失敗：${res.error}`);
       }
@@ -910,7 +913,7 @@ export const ScriptEditor = ({
                     const setting = newSceneMatch[2];
                     const location = newSceneMatch[3].trim();
                     const time = newSceneMatch[4].trim();
-                    const newSceneId = 'scene-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+                    const newSceneId = 'scene-' + crypto.randomUUID();
                     const newScene = {
                       id: newSceneId,
                       setting,

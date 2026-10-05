@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { RenderElementProps, RenderLeafProps } from 'slate-react';
 import { useSlate, useReadOnly } from 'slate-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -229,12 +229,23 @@ const SceneElement = ({ attributes, children, element, style, scenes }: any) => 
   // Fallback to document order if not found in outline
   if (sceneIndex === -1) {
     let count = 0;
-    for (const node of editor.children) {
-      if ((node as any).type === 'scene') {
-        count++;
-        if (node === element) {
-          displayNumber = count;
-          break;
+    try {
+      const elementPath = ReactEditor.findPath(editor, element);
+      for (let i = 0; i <= elementPath[0]; i++) {
+        const node = editor.children[i];
+        if ((node as any).type === 'scene') {
+          count++;
+        }
+      }
+      displayNumber = count;
+    } catch(e) {
+      for (const node of editor.children) {
+        if ((node as any).type === 'scene') {
+          count++;
+          if (node === element || (node as any).sceneId === element.sceneId) {
+            displayNumber = count;
+            break;
+          }
         }
       }
     }
