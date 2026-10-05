@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Save, Download } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './App.css';
 import { ScriptEditor } from './components/editor/Editor';
@@ -196,6 +196,27 @@ function App() {
   const [currentFilePath, setCurrentFilePath] = useState<string>('');
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
+
+  const CURRENT_VERSION = 'v1.0.0';
+
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const res = await fetch('https://api.github.com/repos/sutimlong/Scriptly/releases/latest');
+        if (res.ok) {
+          const data = await res.json();
+          const latestVersion = data.tag_name;
+          if (latestVersion && latestVersion !== CURRENT_VERSION && latestVersion.startsWith('v')) {
+            setUpdateAvailable(latestVersion);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to check version:', e);
+      }
+    };
+    checkVersion();
+  }, []);
 
   useEffect(() => {
     try {
@@ -1221,6 +1242,52 @@ function App() {
         )}
       </AnimatePresence>
       
+      <AnimatePresence>
+        {updateAvailable && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100000]">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-xl shadow-xl w-full max-w-md p-8 relative"
+            >
+              <div className="flex items-center justify-center mb-4">
+                <div className="bg-blue-100 p-3 rounded-full text-blue-600">
+                  <Download size={32} />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">發現新版本 {updateAvailable}！</h2>
+              <p className="text-gray-600 text-center mb-6">
+                Scriptly 有新的更新發佈了！為了獲得更好的寫作體驗與最新功能，建議您前往下載更新。
+              </p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => {
+                    const electron = typeof window !== 'undefined' && (window as any).require ? (window as any).require('electron') : null;
+                    if (electron && electron.shell) {
+                      electron.shell.openExternal('https://github.com/sutimlong/Scriptly/releases/latest');
+                    } else {
+                      window.open('https://github.com/sutimlong/Scriptly/releases/latest', '_blank');
+                    }
+                    setUpdateAvailable(null);
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg flex justify-center items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Download size={18} />
+                  立即前往更新
+                </button>
+                <button 
+                  onClick={() => setUpdateAvailable(null)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 rounded-lg transition-colors cursor-pointer"
+                >
+                  暫時不要
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       </div>
     </>
   );
