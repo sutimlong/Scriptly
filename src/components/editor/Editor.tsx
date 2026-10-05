@@ -3,7 +3,7 @@ import { createEditor } from 'slate';
 import type { Descendant } from 'slate';
 import { Slate, Editable, withReact, ReactEditor } from 'slate-react';
 import { withHistory } from 'slate-history';
-import { Editor, Transforms, Range, Point, Text } from 'slate';
+import { Editor, Transforms, Range, Point, Text, Path, Element as SlateElement } from 'slate';
 import { Element, Leaf } from './Elements';
 import { EditorToolbar, toggleBlock, toggleMark } from './Toolbar';
 import { HelpCircle, X, Save, Keyboard } from 'lucide-react';
@@ -73,23 +73,105 @@ export const ScriptEditor = ({
       insertBreak();
     };
 
-    const { deleteBackward } = e;
+    const { deleteBackward, deleteForward, deleteFragment, apply } = e;
+    
+    e.apply = (op) => {
+      if (op.type === 'merge_node') {
+        try {
+          const { path } = op;
+          const [node] = Editor.node(e, path);
+          const prevPath = Path.previous(path);
+          const [prevNode] = Editor.node(e, prevPath);
+          
+          if (
+            (node as any).type === 'scene' || 
+            (prevNode as any).type === 'scene'
+          ) {
+            // Unconditionally prevent ANY merging that involves a scene block
+            return;
+          }
+        } catch (err) {
+          // Ignore path resolution errors
+        }
+      }
+      apply(op);
+    };
+    
+    e.deleteForward = (unit) => {
+      const { selection } = e;
+      if (selection && Range.isCollapsed(selection)) {
+        const end = Editor.end(e, selection.anchor.path.slice(0, 1));
+        if (Point.equals(selection.anchor, end)) {
+          // If we are at the end of a block, check if the CURRENT or NEXT block is a scene
+          const [currentNode] = Editor.node(e, selection.anchor.path.slice(0, 1));
+          const next = Editor.next(e, { at: selection.anchor.path.slice(0, 1) });
+          
+          if ((currentNode as any).type === 'scene' || (next && (next[0] as any).type === 'scene')) {
+            // Prevent merging scenes together or pulling paragraphs into scenes
+            return;
+          }
+        }
+      }
+      deleteForward(unit);
+    };
+
+    e.deleteFragment = (direction) => {
+      const { selection } = e;
+      if (selection && Range.isExpanded(selection)) {
+        const edges = Range.edges(selection);
+        const startPath = edges[0].path.slice(0, 1);
+        const endPath = edges[1].path.slice(0, 1);
+        
+        if (!Path.equals(startPath, endPath)) {
+          const scenes = Array.from(Editor.nodes(e, {
+            at: selection,
+            match: n => !Editor.isEditor(n) && SlateElement.isElement(n) && (n as any).type === 'scene'
+          }));
+          
+          if (scenes.length > 0) {
+            Editor.withoutNormalizing(e, () => {
+              const [start, end] = Range.edges(selection);
+              
+              const endBlockPath = end.path.slice(0, 1);
+              const endBlockStart = Editor.start(e, endBlockPath);
+              Transforms.delete(e, { at: { anchor: endBlockStart, focus: end }, hanging: false });
+              
+              for (let i = endBlockPath[0] - 1; i > startPath[0]; i--) {
+                Transforms.removeNodes(e, { at: [i] });
+              }
+              
+              const startBlockEnd = Editor.end(e, startPath);
+              Transforms.delete(e, { at: { anchor: start, focus: startBlockEnd }, hanging: false });
+              
+              Transforms.select(e, start);
+            });
+            return;
+          }
+        }
+      }
+      deleteFragment(direction);
+    };
+
     e.deleteBackward = (unit) => {
       const { selection } = e;
       if (selection && Range.isCollapsed(selection)) {
-        const [match] = Editor.nodes(e, {
-          match: n => !Editor.isEditor(n) && (n as any).type === 'scene',
-        });
+        const path = selection.anchor.path.slice(0, 1);
+        const start = Editor.start(e, path);
         
-        if (match) {
-          const [, path] = match;
-          const start = Editor.start(e, path);
+        if (Point.equals(selection.anchor, start)) {
+          const [currentNode] = Editor.node(e, path);
           
-          if (Point.equals(selection.anchor, start)) {
-            // At the start of the scene block, turn it back into a paragraph
+          if ((currentNode as any).type === 'scene') {
             Transforms.setNodes(e, { type: 'paragraph' } as any, { at: path });
             Transforms.unsetNodes(e, 'sceneId', { at: path });
             return;
+          } else {
+            // If it's a paragraph, check if the previous block is a scene
+            const prev = Editor.previous(e, { at: path });
+            if (prev && (prev[0] as any).type === 'scene') {
+              // Prevent merging paragraph into the previous scene block
+              return;
+            }
           }
         }
       }
@@ -103,11 +185,15 @@ export const ScriptEditor = ({
   const [showFormatInfo, setShowFormatInfo] = useState(false);
   const [showShortcutsInfo, setShowShortcutsInfo] = useState(false);
   const [showAddScene, setShowAddScene] = useState(false);
+  const [showSceneSelection, setShowSceneSelection] = useState(false);
+  const [sceneSelectionCandidates, setSceneSelectionCandidates] = useState<any[]>([]);
+  const [sceneSelectionPath, setSceneSelectionPath] = useState<Path | null>(null);
   const [savedSelection, setSavedSelection] = useState<Range | null>(null);
   const [sceneSetting, setSceneSetting] = useState('內景');
   const [sceneLocation, setSceneLocation] = useState('');
   const [sceneTime, setSceneTime] = useState('日');
-  const [hoveredCharacterName, setHoveredCharacterName] = useState<string | null>(null);
+  const [hoveredCharacterNames, setHoveredCharacterNames] = useState<string[] | null>(null);
+  const [hoveredOutlineSceneId, setHoveredOutlineSceneId] = useState<string | null>(null);
   const [showAddDialogue, setShowAddDialogue] = useState(false);
 
   const handleExportPDF = async () => {
@@ -239,7 +325,7 @@ export const ScriptEditor = ({
     }
     
     // Check if current block is empty
-    const currentBlock = Editor.above(editor, { match: n => Editor.isBlock(editor, n as any) });
+    const currentBlock = Editor.above(editor, { match: n => !Editor.isEditor(n) && Editor.isBlock(editor, n as any) });
     
     if (currentBlock) {
       const path = currentBlock[1];
@@ -316,11 +402,29 @@ export const ScriptEditor = ({
   };
 
   const handleOutlineCardClick = (scene: Scene, index: number) => {
+    const sceneNumber = index + 1;
     const textToSearch = [scene.setting, scene.location, scene.time].filter(Boolean).join('  ');
 
     const matchIter = Editor.nodes(editor, {
       at: [],
-      match: (n, p) => !Editor.isEditor(n) && (n as any).type === 'scene' && Editor.string(editor, p) === textToSearch
+      match: (n, p) => {
+        if (Editor.isEditor(n)) return false;
+        
+        // 判斷標準 1: 直接比對 sceneId
+        if ((n as any).type === 'scene' && (n as any).sceneId === scene.id) {
+          return true;
+        }
+        
+        // 判斷標準 2: 透過文字開頭的場次場號比對
+        const text = Editor.string(editor, p);
+        if ((n as any).type === 'scene' || text.match(/^(?:(\d+)\.\s*)?(內景|外景)/)) {
+          const numMatch = text.match(/^(\d+)\./);
+          if (numMatch && parseInt(numMatch[1]) === sceneNumber) {
+            return true;
+          }
+        }
+        return false;
+      }
     });
     const match = Array.from(matchIter)[0];
 
@@ -328,7 +432,18 @@ export const ScriptEditor = ({
       const [node, path] = match;
       try {
         const domNode = ReactEditor.toDOMNode(editor, node);
-        domNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const scrollContainer = scrollRef.current;
+        if (scrollContainer && domNode) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const nodeRect = domNode.getBoundingClientRect();
+          
+          const targetScrollTop = scrollContainer.scrollTop + (nodeRect.top - containerRect.top) - (containerRect.height / 2) + (nodeRect.height / 2);
+          
+          scrollContainer.scrollTo({
+            top: targetScrollTop,
+            behavior: 'smooth'
+          });
+        }
         Transforms.select(editor, path);
       } catch (e) {
         console.error('Failed to scroll to node', e);
@@ -345,7 +460,7 @@ export const ScriptEditor = ({
 
     let insertedCharacterPath: number[] = [];
 
-    const currentBlock = Editor.above(editor, { match: n => Editor.isBlock(editor, n as any) });
+    const currentBlock = Editor.above(editor, { match: n => !Editor.isEditor(n) && Editor.isBlock(editor, n as any) });
     if (currentBlock) {
       const [node, path] = currentBlock;
       const text = Editor.string(editor, path);
@@ -496,7 +611,7 @@ export const ScriptEditor = ({
       Transforms.select(editor, targetSelection);
     }
 
-    const currentBlock = Editor.above(editor, { match: n => Editor.isBlock(editor, n as any) });
+    const currentBlock = Editor.above(editor, { match: n => !Editor.isEditor(n) && Editor.isBlock(editor, n as any) });
     if (!currentBlock) return;
     
     const [node, path] = currentBlock;
@@ -560,6 +675,7 @@ export const ScriptEditor = ({
 
   const { pageCount, currentPage } = usePagination(wrapperRef, scrollRef, editor, zoom);
 
+
   // Canvas height = all pages + gaps between them
   const canvasHeight =
     pageCount * PAGE_HEIGHT_PX + Math.max(0, pageCount - 1) * PAGE_GAP;
@@ -621,16 +737,23 @@ export const ScriptEditor = ({
         if (newZoom !== prevZoom) {
           const ratio = newZoom / prevZoom;
           
+          // Current mouse position relative to the scroll container's viewport
           const rect = el.getBoundingClientRect();
           const mouseX = e.clientX - rect.left;
           const mouseY = e.clientY - rect.top;
           
+          // Current absolute position of mouse in the scrollable content
           const docX = el.scrollLeft + mouseX;
           const docY = el.scrollTop + mouseY;
           
-          const originX = el.scrollWidth / 2;
+          // When transformOrigin is 'top center', the origin of scale is horizontally at the center of the flex container,
+          // and vertically at 32px (because of margin-top: 32px on the canvas container).
+          // To find the origin X relative to the scrollable content:
+          // flexContainerRef.current.clientWidth is the width of the scrollable content (max of viewport and scaled canvas)
+          const originX = flexContainerRef.current ? flexContainerRef.current.clientWidth / 2 : el.scrollWidth / 2;
           const originY = 32;
 
+          // The new position of the point that was under the mouse
           const newDocX = originX + (docX - originX) * ratio;
           const newDocY = originY + (docY - originY) * ratio;
           
@@ -642,8 +765,10 @@ export const ScriptEditor = ({
           }
           if (flexContainerRef.current) {
              flexContainerRef.current.style.minHeight = `${canvasHeight * (newZoom / 100) + 64}px`;
+             flexContainerRef.current.style.minWidth = `${PAGE_WIDTH_PX * (newZoom / 100)}px`;
           }
           
+          // Shift scroll so the newDocX/Y is under the mouseX/mouseY
           el.scrollLeft = newDocX - mouseX;
           el.scrollTop = newDocY - mouseY;
 
@@ -669,31 +794,47 @@ export const ScriptEditor = ({
     ([node, path]: any) => {
       const ranges: any[] = [];
 
-      if (!hoveredCharacterName) {
+      if (!hoveredCharacterNames && !hoveredOutlineSceneId) {
         return ranges;
       }
 
       if (Text.isText(node)) {
         const { text } = node;
-        const search = hoveredCharacterName;
-        const parts = text.split(search);
-        let offset = 0;
-
-        parts.forEach((part, i) => {
-          if (i !== 0) {
-            ranges.push({
-              anchor: { path, offset: offset - search.length },
-              focus: { path, offset },
-              highlight: true,
-            });
+        
+        // Scene Outline Hover Highlight
+        if (hoveredOutlineSceneId) {
+          const parentEntry = Editor.parent(editor, path);
+          if (parentEntry) {
+             const parent = parentEntry[0];
+             if ((parent as any).type === 'scene' && (parent as any).sceneId === hoveredOutlineSceneId) {
+                ranges.push({
+                  anchor: { path, offset: 0 },
+                  focus: { path, offset: text.length },
+                  highlight: true,
+                });
+             }
           }
-          offset = offset + part.length + search.length;
-        });
-      }
+        }
+        
+        if (hoveredCharacterNames) {
+          for (const matchName of hoveredCharacterNames) {
+            if (!matchName) continue;
+            let idx = text.indexOf(matchName);
+            while (idx !== -1) {
+              ranges.push({
+                anchor: { path, offset: idx },
+                focus: { path, offset: idx + matchName.length },
+                highlight: true,
+              });
+              idx = text.indexOf(matchName, idx + matchName.length);
+            }
+          }
+        } // Close if (hoveredCharacterNames)
+      } // Close if (Text.isText(node))
 
       return ranges;
     },
-    [hoveredCharacterName]
+    [hoveredCharacterNames, hoveredOutlineSceneId, editor]
   );
 
   return (
@@ -711,40 +852,64 @@ export const ScriptEditor = ({
         setWordCount(text.trim().length);
 
         // Auto-detect scene heading
-        if (editor.selection) {
-          const currentBlock = Editor.above(editor, { match: n => Editor.isBlock(editor, n as any) });
+        const hasSetNode = editor.operations.some(op => op.type === 'set_node');
+        if (editor.selection && !hasSetNode) {
+          const currentBlock = Editor.above(editor, { match: n => !Editor.isEditor(n) && Editor.isBlock(editor, n as any) });
           if (currentBlock) {
             const [node, path] = currentBlock;
             if ((node as any).type !== 'scene') {
               const blockText = Editor.string(editor, path);
               if (blockText.trim().length > 0) {
-                const normalizeStr = (str: string) => str.replace(/^(\d+\.)?\s*/, '').replace(/[-\s－]/g, '').toLowerCase();
-                const normalizedBlockText = normalizeStr(blockText);
-                const matchedScene = scenes.find((s: any) => {
-                  const sceneText = [s.setting, s.location, s.time].filter(Boolean).join('  ');
-                  return normalizeStr(sceneText) === normalizedBlockText;
-                });
-                if (matchedScene) {
-                  // If user manually typed the number, let's clean it up so the auto-numbering handles it
-                  const correctText = [matchedScene.setting, matchedScene.location, matchedScene.time].filter(Boolean).join('  ');
-                  setTimeout(() => {
-                    Transforms.setNodes(editor, { type: 'scene', sceneId: matchedScene.id } as any, { at: path });
-                    // Replace text with the clean version without manual numbering
-                    Transforms.delete(editor, {
-                      at: {
-                        anchor: Editor.start(editor, path),
-                        focus: Editor.end(editor, path)
-                      }
+                const sceneRegex = /^(?:(\d+)\.\s*)?(內景|外景)\s+(.+?)\s+(.+)$/;
+                const newSceneMatch = blockText.trim().match(sceneRegex);
+
+                if (newSceneMatch) {
+                  const numStr = newSceneMatch[1];
+                  const explicitSceneNum = numStr ? parseInt(numStr) : null;
+                  
+                  let matchedScene = null;
+                  let shouldShowDialog = false;
+
+                  if (explicitSceneNum && explicitSceneNum > 0 && explicitSceneNum <= scenes.length) {
+                    matchedScene = scenes[explicitSceneNum - 1];
+                  }
+
+                  if (!matchedScene) {
+                    const normalizeStr = (str: string) => str.replace(/^(\d+\.)?\s*/, '').replace(/[-\s－]/g, '').toLowerCase();
+                    const normalizedBlockText = normalizeStr(blockText);
+                    const matchedScenes = scenes.filter((s: any) => {
+                      const sceneText = [s.setting, s.location, s.time].filter(Boolean).join('  ');
+                      return normalizeStr(sceneText) === normalizedBlockText;
                     });
-                    Transforms.insertText(editor, correctText, { at: Editor.start(editor, path) });
-                  }, 0);
-                } else {
-                  // Check if it is a completely new scene heading that user typed manually
-                  const newSceneMatch = blockText.trim().match(/^(?:(?:\d+\.)?\s*)?(內景|外景)\s+(.+?)\s+(.+)$/);
-                  if (newSceneMatch) {
-                    const setting = newSceneMatch[1];
-                    const location = newSceneMatch[2].trim();
-                    const time = newSceneMatch[3].trim();
+
+                    if (matchedScenes.length > 1) {
+                      shouldShowDialog = true;
+                      setTimeout(() => {
+                        setSceneSelectionCandidates(matchedScenes);
+                        setSceneSelectionPath(path);
+                        setShowSceneSelection(true);
+                      }, 0);
+                    } else if (matchedScenes.length === 1) {
+                      matchedScene = matchedScenes[0];
+                    }
+                  }
+
+                  if (matchedScene) {
+                    const correctText = [matchedScene.setting, matchedScene.location, matchedScene.time].filter(Boolean).join('  ');
+                    setTimeout(() => {
+                      Transforms.setNodes(editor, { type: 'scene', sceneId: matchedScene.id } as any, { at: path });
+                      Transforms.delete(editor, {
+                        at: {
+                          anchor: Editor.start(editor, path),
+                          focus: Editor.end(editor, path)
+                        }
+                      });
+                      Transforms.insertText(editor, correctText, { at: Editor.start(editor, path) });
+                    }, 0);
+                  } else if (!shouldShowDialog) {
+                    const setting = newSceneMatch[2];
+                    const location = newSceneMatch[3].trim();
+                    const time = newSceneMatch[4].trim();
                     const newSceneId = 'scene-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
                     const newScene = {
                       id: newSceneId,
@@ -823,6 +988,8 @@ export const ScriptEditor = ({
                 <div 
                   className="outline-card" 
                   style={{ cursor: 'pointer' }}
+                  onMouseEnter={() => setHoveredOutlineSceneId(scene.id)}
+                  onMouseLeave={() => setHoveredOutlineSceneId(null)}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleOutlineCardClick(scene, i);
@@ -844,7 +1011,7 @@ export const ScriptEditor = ({
 
         {/* ── Centre: vertically paginated A4 editor ── */}
         <div className="script-a4-scroll-area" ref={scrollRef}>
-          <div ref={flexContainerRef} style={{ minHeight: canvasHeight * (zoom / 100) + 64, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', width: '100%' }}>
+          <div ref={flexContainerRef} style={{ minHeight: canvasHeight * (zoom / 100) + 64, minWidth: PAGE_WIDTH_PX * (zoom / 100), display: 'flex', justifyContent: 'center', alignItems: 'flex-start', width: '100%' }}>
             <div
               ref={canvasContainerRef}
               className="script-pages-canvas"
@@ -864,7 +1031,7 @@ export const ScriptEditor = ({
                 className="script-a4-page-bg"
                 style={{
                   position: 'absolute',
-                  top: i * (PAGE_HEIGHT_PX + PAGE_GAP),
+                  top: i * (PAGE_HEIGHT_PX + PAGE_GAP), // PAGE_GAP is now 0
                   left: 0,
                   width: PAGE_WIDTH_PX,
                   height: PAGE_HEIGHT_PX,
@@ -904,56 +1071,77 @@ export const ScriptEditor = ({
                 }}
                 onKeyDown={(e) => {
                   if (e.ctrlKey || e.metaKey) {
-                    switch (e.code) {
-                      case 'KeyS':
-                        e.preventDefault();
-                        onSave();
-                        return;
-                      case 'KeyB':
-                        e.preventDefault();
-                        toggleMark(editor, 'bold');
-                        return;
-                      case 'KeyI':
-                        e.preventDefault();
-                        toggleMark(editor, 'italic');
-                        return;
-                      case 'KeyU':
-                        e.preventDefault();
-                        toggleMark(editor, 'underline');
-                        return;
-                      case 'KeyE':
-                        e.preventDefault();
-                        handleExportPDF();
-                        return;
-                      case 'Digit1':
-                      case 'Numpad1':
+                    const key = e.key.toLowerCase();
+                    const code = e.code;
+                    
+                    if (key === 'a' || code === 'KeyA') {
+                      e.preventDefault();
+                      try {
+                        Transforms.select(editor, {
+                          anchor: Editor.start(editor, []),
+                          focus: Editor.end(editor, []),
+                        });
+                      } catch (err) {
+                        console.warn('Select all failed', err);
+                      }
+                      return;
+                    }
+                    if (key === 'z' || code === 'KeyZ') {
+                      e.preventDefault();
+                      if (e.shiftKey) {
+                        editor.redo();
+                      } else {
+                        editor.undo();
+                      }
+                      return;
+                    }
+                    if (key === 's' || code === 'KeyS') {
+                      e.preventDefault();
+                      onSave();
+                      return;
+                    }
+                    if (key === 'b' || code === 'KeyB') {
+                      e.preventDefault();
+                      toggleMark(editor, 'bold');
+                      return;
+                    }
+                    if (key === 'i' || code === 'KeyI') {
+                      e.preventDefault();
+                      toggleMark(editor, 'italic');
+                      return;
+                    }
+                    if (key === 'u' || code === 'KeyU') {
+                      e.preventDefault();
+                      toggleMark(editor, 'underline');
+                      return;
+                    }
+                    if (key === 'e' || code === 'KeyE') {
+                      e.preventDefault();
+                      handleExportPDF();
+                      return;
+                    }
+                    
+                    switch (key) {
+                      case '1':
                         e.preventDefault();
                         openSceneDialog();
                         return;
-                      case 'Digit2':
-                      case 'Numpad2':
+                      case '2':
                         e.preventDefault();
                         handleAddDescription();
                         return;
-                      case 'Digit3':
-                      case 'Numpad3':
+                      case '3':
                         e.preventDefault();
                         setSavedSelection(editor.selection);
                         setShowAddDialogue(true);
                         return;
-                      case 'Slash':
-                      case 'NumpadDivide':
+                      case '/':
                         e.preventDefault();
                         setShowShortcutsInfo(s => !s);
                         return;
                     }
                     
-                    // Fallbacks for different keyboard layouts
-                    if (e.key === '/') {
-                        e.preventDefault();
-                        setShowShortcutsInfo(s => !s);
-                        return;
-                    }
+                    // Removed fallback block since e.key is now primarily used
                   }
 
                   if (e.key === 'Tab') {
@@ -969,7 +1157,7 @@ export const ScriptEditor = ({
                   }
 
                   if (e.key === 'Enter') {
-                    const currentBlock = Editor.above(editor, { match: n => Editor.isBlock(editor, n as any) });
+                    const currentBlock = Editor.above(editor, { match: n => !Editor.isEditor(n) && Editor.isBlock(editor, n as any) });
                     if (currentBlock) {
                       const [node, path] = currentBlock;
                       const blockText = Editor.string(editor, path);
@@ -1324,6 +1512,90 @@ export const ScriptEditor = ({
           </div>
         )}
 
+        {/* Scene Selection Dialog */}
+        {showSceneSelection && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999999,
+          }}>
+            <div style={{
+              background: 'white',
+              padding: '32px',
+              borderRadius: '12px',
+              width: '500px',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            }}>
+              <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '1.25rem', color: '#1f2937' }}>選擇場景大綱版本</h3>
+              <p style={{ color: '#4b5563', marginBottom: '16px', lineHeight: '1.5' }}>偵測到多個相同地點的場景，請選擇要對應哪一場的大綱：</p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                {sceneSelectionCandidates.map((scene, idx) => {
+                  const sIdx = scenes.findIndex(s => s.id === scene.id);
+                  const sceneNum = sIdx !== -1 ? sIdx + 1 : idx + 1;
+                  return (
+                    <div 
+                      key={scene.id}
+                      onClick={() => {
+                        if (!sceneSelectionPath) return;
+                        const correctText = [scene.setting, scene.location, scene.time].filter(Boolean).join('  ');
+                        try {
+                          Transforms.setNodes(editor, { type: 'scene', sceneId: scene.id } as any, { at: sceneSelectionPath });
+                          Transforms.delete(editor, {
+                            at: {
+                              anchor: Editor.start(editor, sceneSelectionPath),
+                              focus: Editor.end(editor, sceneSelectionPath)
+                            }
+                          });
+                          Transforms.insertText(editor, correctText, { at: Editor.start(editor, sceneSelectionPath) });
+                        } catch(e) {}
+                        setShowSceneSelection(false);
+                      }}
+                      style={{
+                        padding: '16px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
+                      onMouseOut={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                    >
+                      <div style={{ fontWeight: 'bold', color: '#1f2937' }}>
+                        第 {sceneNum} 場 - {scene.setting} {scene.location} {scene.time}
+                      </div>
+                      {scene.description && (
+                        <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
+                          {scene.description}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button"
+                  onClick={() => setShowSceneSelection(false)}
+                  style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db', background: 'white', cursor: 'pointer' }}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Add Scene Dialog */}
         {showAddScene && (
           <div style={{
@@ -1413,19 +1685,37 @@ export const ScriptEditor = ({
             <span>角色</span>
             <button onClick={onGoToCharacter} style={{ fontSize: '0.8rem', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>前往編輯</button>
           </div>
-          <Reorder.Group axis="y" values={characters} onReorder={onCharactersChange} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {characters.map((char) => {
-              const editorText = editor.children.map((n: any) => n.children?.[0]?.text || '').join('\n');
-              let totalMentions = 0;
-              const counts: Record<string, number> = {};
-              characters.forEach(c => {
-                const count = editorText.split(`${c.name}：`).length - 1;
-                counts[c.id] = count;
-                totalMentions += count;
-              });
-              const percentage = totalMentions > 0 ? Math.round((counts[char.id] / totalMentions) * 100) : 0;
+          {(() => {
+            const editorText = editor.children.map((n: any) => n.children?.[0]?.text || '').join('\n');
+            const lines = editorText.split('\n');
+            const speakers = lines
+              .map(line => {
+                const match = line.match(/^(.*?)[：:]/);
+                return match ? match[1].replace(/\s+/g, '') : null;
+              })
+              .filter(Boolean) as string[];
 
-              return (
+            let totalMentions = 0;
+            const counts: Record<string, number> = {};
+            
+            characters.forEach(c => {
+              const names = [c.name, ...(c.nicknames || [])].map(n => n.replace(/\s+/g, ''));
+              let count = 0;
+              speakers.forEach(name1 => {
+                if (name1.length > 0 && names.some(name2 => name2.length > 0 && (name1.includes(name2) || name2.includes(name1)))) {
+                  count++;
+                }
+              });
+              counts[c.id] = count;
+              totalMentions += count;
+            });
+
+            return (
+              <Reorder.Group axis="y" values={characters} onReorder={onCharactersChange} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {characters.map((char) => {
+                  const percentage = totalMentions > 0 ? Math.round((counts[char.id] / totalMentions) * 100) : 0;
+
+                  return (
                 <Reorder.Item key={char.id} value={char} style={{ marginBottom: '12px' }}>
                   <div 
                     className="character-card" 
@@ -1434,8 +1724,8 @@ export const ScriptEditor = ({
                       e.preventDefault();
                       handleCharacterCardClick(char);
                     }}
-                    onMouseEnter={() => setHoveredCharacterName(char.name)}
-                    onMouseLeave={() => setHoveredCharacterName(null)}
+                    onMouseEnter={() => setHoveredCharacterNames([char.name, ...(char.nicknames || [])])}
+                    onMouseLeave={() => setHoveredCharacterNames(null)}
                   >
                     <div style={{ position: 'absolute', top: '12px', right: '12px', fontSize: '0.75rem', fontWeight: 'bold', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '12px' }}>
                       {percentage}%
@@ -1451,8 +1741,9 @@ export const ScriptEditor = ({
                 </Reorder.Item>
               );
             })}
-
-          </Reorder.Group>
+              </Reorder.Group>
+            );
+          })()}
           <button className="add-outline-btn" onClick={onAddCharacter}>＋ 新增角色</button>
         </div>
       </div>

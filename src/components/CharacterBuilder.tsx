@@ -9,6 +9,7 @@ export interface Character {
   name: string;
   description: string;
   photoUrl?: string;
+  nicknames?: string[];
 }
 
 interface CharacterBuilderProps {
@@ -89,12 +90,13 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ characters, 
     const newChar: Character = {
       id: Math.random().toString(36).substr(2, 9),
       name: '',
-      description: ''
+      description: '',
+      nicknames: []
     };
     onChange([...(characters || []), newChar]);
   };
 
-  const updateCharacter = (id: string, field: keyof Character, value: string) => {
+  const updateCharacter = (id: string, field: keyof Character, value: any) => {
     onChange((characters || []).map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
@@ -237,6 +239,58 @@ export const CharacterBuilder: React.FC<CharacterBuilderProps> = ({ characters, 
                   fontSize: '1rem'
                 }} 
               />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(char.nicknames || []).map((nickname, index) => (
+                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input
+                      type="text"
+                      placeholder="暱稱"
+                      value={nickname}
+                      onChange={e => {
+                        const newNicknames = [...(char.nicknames || [])];
+                        newNicknames[index] = e.target.value;
+                        updateCharacter(char.id, 'nicknames', newNicknames);
+                      }}
+                      style={{ 
+                        flex: 1, 
+                        padding: '4px 8px', 
+                        border: '1px solid #d1d5db', 
+                        fontSize: '0.9rem',
+                        textAlign: 'center',
+                        minWidth: 0
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const newNicknames = [...(char.nicknames || [])];
+                        newNicknames.splice(index, 1);
+                        updateCharacter(char.id, 'nicknames', newNicknames);
+                      }}
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                      title="移除暱稱"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newNicknames = [...(char.nicknames || []), ''];
+                    updateCharacter(char.id, 'nicknames', newNicknames);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.85rem',
+                    color: '#6b7280',
+                    background: '#f3f4f6',
+                    border: '1px dashed #d1d5db',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ＋ 新增暱稱
+                </button>
+              </div>
             </div>
 
             {/* Description Column */}

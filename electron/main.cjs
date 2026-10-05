@@ -110,11 +110,15 @@ function createWindow() {
     titleBarStyle: 'hidden',
     title: "Scriptly - 未命名劇本",
     icon: windowIcon,
+    show: true,
+    backgroundColor: '#ffffff',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
     }
   });
+
+    mainWindow.maximize();
 
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     console.log(`[Browser Console]: ${message}`);
@@ -128,9 +132,6 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
     mainWindow.webContents.openDevTools();
   }
-  
-  // 填滿整個螢幕
-  mainWindow.maximize();
 }
 
 app.whenReady().then(() => {

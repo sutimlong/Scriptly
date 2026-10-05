@@ -14,7 +14,7 @@ const initialScriptContent: Descendant[] = [
   { type: 'paragraph', children: [{ text: '' }] },
 ];
 
-const TypewriterText = ({ text, showCursor = false }: { text: string, showCursor?: boolean }) => {
+const TypewriterText = ({ text, showCursor = false, speed = 100 }: { text: string, showCursor?: boolean, speed?: number }) => {
   const [displayText, setDisplayText] = useState('');
 
   useEffect(() => {
@@ -26,10 +26,10 @@ const TypewriterText = ({ text, showCursor = false }: { text: string, showCursor
       } else {
         clearInterval(interval);
       }
-    }, 100);
+    }, speed);
 
     return () => clearInterval(interval);
-  }, [text]);
+  }, [text, speed]);
 
   return (
     <span>
@@ -178,6 +178,7 @@ interface RecentFile {
 }
 
 function App() {
+  const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<'welcome' | 'landing' | 'title' | 'steps' | 'step1' | 'step2' | 'step3' | 'step4' | 'step5'>('welcome');
   const [scriptTitle, setScriptTitle] = useState('');
   const [loglineText, setLoglineText] = useState('');
@@ -194,11 +195,44 @@ function App() {
   const [scriptContent, setScriptContent] = useState<Descendant[]>(initialScriptContent);
   const [currentFileHandle, setCurrentFileHandle] = useState<any>(null);
   const [currentFilePath, setCurrentFilePath] = useState<string>('');
-  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => {
+    try {
+      const stored = localStorage.getItem('scriptly-recent-files');
+      if (stored) {
+        const parsed: RecentFile[] = JSON.parse(stored);
+        
+        const fs = typeof window !== 'undefined' && (window as any).require ? (window as any).require('fs') : null;
+        if (fs) {
+          const existingFiles = parsed.filter(file => {
+            try {
+              return fs.existsSync(file.path);
+            } catch (e) {
+              return false;
+            }
+          });
+          if (existingFiles.length !== parsed.length) {
+            localStorage.setItem('scriptly-recent-files', JSON.stringify(existingFiles.slice(0, 3)));
+          }
+          return existingFiles.slice(0, 3);
+        } else {
+          return parsed.slice(0, 3);
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
 
-  const CURRENT_VERSION = 'v1.0.0';
+  const CURRENT_VERSION = 'v1.1.0';
+
+  useEffect(() => {
+    // 模擬載入時間，顯示轉圈動畫
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const checkVersion = async () => {
@@ -220,32 +254,6 @@ function App() {
       }
     };
     checkVersion();
-  }, []);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('scriptly-recent-files');
-      if (stored) {
-        const parsed: RecentFile[] = JSON.parse(stored);
-        
-        const fs = typeof window !== 'undefined' && (window as any).require ? (window as any).require('fs') : null;
-        if (fs) {
-          const existingFiles = parsed.filter(file => {
-            try {
-              return fs.existsSync(file.path);
-            } catch (e) {
-              return false;
-            }
-          });
-          setRecentFiles(existingFiles.slice(0, 3));
-          if (existingFiles.length !== parsed.length) {
-            localStorage.setItem('scriptly-recent-files', JSON.stringify(existingFiles.slice(0, 3)));
-          }
-        } else {
-          setRecentFiles(parsed.slice(0, 3));
-        }
-      }
-    } catch (e) {}
   }, []);
 
   const addToRecentFiles = (name: string, path: string) => {
@@ -526,8 +534,9 @@ function App() {
         style={{
           position: 'fixed',
           top: 0,
-          left: 0,
-          right: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100vw',
           height: '28px',
           display: 'flex',
           alignItems: 'center',
@@ -546,11 +555,47 @@ function App() {
       </div>
       <div className="app-container">
         <AnimatePresence mode="wait">
-        {view === 'welcome' ? (
+        {isLoading ? (
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              position: 'absolute', 
+              top: 0, 
+              width: '100%', 
+              height: '100%'
+            }}
+          >
+            <div className="loading-spinner" style={{
+              width: '40px',
+              height: '40px',
+              border: '3px solid #f3f3f3',
+              borderTop: '3px solid #111827',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <style>
+              {`
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}
+            </style>
+            <p style={{ marginTop: '24px', color: '#6b7280', fontSize: '1rem', letterSpacing: '0.05em' }}>正在準備 Scriptly...</p>
+          </motion.div>
+        ) : view === 'welcome' ? (
           <motion.div
             key="welcome"
             className="welcome-page"
-            initial={{ opacity: 0 }}
+            initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             exit={{ x: '-100%', opacity: 0 }}
             transition={{ duration: 0.5, ease: 'easeInOut' }}
@@ -568,7 +613,7 @@ function App() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <p style={{ fontSize: '1.2rem', color: '#6b7280', marginBottom: '8px' }}>歡迎使用</p>
               <h1 style={{ fontSize: '3rem', fontWeight: 300, color: '#111827', marginBottom: '48px', letterSpacing: '0.05em' }}>
-                <TypewriterText text="Scriptly" showCursor={true} />
+                <TypewriterText text="Scriptly" showCursor={true} speed={60} />
               </h1>
               <div style={{ display: 'flex', gap: '24px' }}>
                 <button

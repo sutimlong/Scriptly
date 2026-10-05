@@ -33,14 +33,31 @@ const ParagraphElement = ({ attributes, children, element, style, scenes }: any)
   let suggestion = '';
   let suggestionScene: any = null;
   let isFocused = false;
-  let text = '';
+  let text = element.children?.[0]?.text || '';
+
+  const isAction = text.startsWith('△ ');
+  const dialogMatch = text.match(/^(.*?)[：:]/);
+  
+  const customStyle = { ...style };
+  if (isAction) {
+    customStyle.paddingLeft = '1.5em';
+    customStyle.textIndent = '-1.5em';
+  } else if (dialogMatch) {
+    const prefix = dialogMatch[0];
+    let ems = 0;
+    for (let i = 0; i < prefix.length; i++) {
+      ems += prefix.charCodeAt(i) > 255 ? 1 : 0.5;
+    }
+    customStyle.paddingLeft = `${ems}em`;
+    customStyle.textIndent = `-${ems}em`;
+  }
+
   
   if (editor.selection) {
     try {
       const path = ReactEditor.findPath(editor, element);
       if (Range.isCollapsed(editor.selection) && Path.equals(path, editor.selection.anchor.path.slice(0, path.length))) {
         isFocused = true;
-        text = element.children?.[0]?.text || '';
         
         const match = text.match(/^(\d+)\.\s*(.*)$/);
         if (match) {
@@ -95,7 +112,7 @@ const ParagraphElement = ({ attributes, children, element, style, scenes }: any)
 
   return (
     <div style={{ position: 'relative' }}>
-      <p style={{ ...style }} {...attributes}>
+      <p style={customStyle} {...attributes}>
         {children}
       </p>
       {suggestion && (
@@ -241,7 +258,7 @@ const SceneElement = ({ attributes, children, element, style, scenes }: any) => 
     >
       <span 
         contentEditable={false} 
-        style={{ userSelect: 'none', marginRight: '4px', whiteSpace: 'nowrap', color: '#1f2937' }}
+        style={{ marginRight: '4px', whiteSpace: 'nowrap', color: '#1f2937', userSelect: 'none' }}
       >
         {displayNumber}. 
       </span>

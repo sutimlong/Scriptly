@@ -21,27 +21,20 @@ export interface PaginationResult {
  * Math-based auto-split using pure Slate API.
  * Estimates the split point based on height ratio, avoiding DOM mapping errors.
  */
-function autoSplitGiantBlock(blockDOM: HTMLElement, editor: Editor, targetHeight: number) {
+function autoSplitGiantBlock(path: number[], editor: Editor, splitChars: number, isScene: boolean) {
   try {
-    const slateNode = ReactEditor.toSlateNode(editor, blockDOM);
-    const path = ReactEditor.findPath(editor, slateNode);
-    
-    // @ts-ignore
-    const text = slateNode.children ? slateNode.children.map(c => c.text).join('') : '';
-    const totalChars = text.length;
-    if (totalChars === 0) return false;
-    
-    const blockH = blockDOM.offsetHeight;
-    // Aim to split 1 line (27px) before the boundary to safely guarantee it fits
-    const safeTargetHeight = Math.max(27, targetHeight - 27);
-    const ratio = safeTargetHeight / blockH;
-    const splitChars = Math.max(1, Math.floor(totalChars * ratio));
-
     const startPoint = Editor.start(editor, path);
     const splitPoint = Editor.after(editor, startPoint, { distance: splitChars, unit: 'character' });
     
     if (splitPoint) {
       Transforms.splitNodes(editor, { at: splitPoint, always: true });
+      // If we just split a scene, the overflow should become a normal paragraph to avoid creating duplicate fake scenes
+      if (isScene) {
+        const nextPath = [...path];
+        nextPath[nextPath.length - 1] += 1; // The newly split node is right after
+        Transforms.setNodes(editor, { type: 'paragraph' } as any, { at: nextPath });
+        Transforms.unsetNodes(editor, 'sceneId', { at: nextPath });
+      }
       return true;
     }
   } catch (e) {
@@ -85,12 +78,25 @@ export function usePagination(
 
       // Auto-split super long paragraphs that span more than a full page
       if (blockH > CONTENT_HEIGHT + 10) {
-         // Queue the split to prevent React warnings during useLayoutEffect
-         setTimeout(() => {
-           autoSplitGiantBlock(block, editor, CONTENT_HEIGHT);
-         }, 0);
-         // Stop processing this render, wait for the split to cause a re-render
-         break;
+         try {
+           const slateNode = ReactEditor.toSlateNode(editor, block);
+           const path = ReactEditor.findPath(editor, slateNode);
+           // @ts-ignore
+           const text = slateNode.children ? slateNode.children.map(c => c.text).join('') : '';
+           const totalChars = text.length;
+           
+           if (totalChars > 0) {
+             const safeTargetHeight = Math.max(27, CONTENT_HEIGHT - 27);
+             const ratio = safeTargetHeight / blockH;
+             const splitChars = Math.max(1, Math.floor(totalChars * ratio));
+             const isScene = (slateNode as any).type === 'scene';
+             
+             // Queue the split to prevent React warnings during useLayoutEffect
+             Promise.resolve().then(() => {
+               autoSplitGiantBlock(path, editor, splitChars, isScene);
+             });
+           }
+         } catch(e) {}
       }
 
       if (pageContentY > 0 && pageContentY + blockH > CONTENT_HEIGHT) {
