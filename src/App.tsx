@@ -321,7 +321,11 @@ function App() {
       } else if (ipcRenderer && fs) {
         const result = await ipcRenderer.invoke('show-save-dialog', {
           defaultPath: defaultName,
-          filters: [{ name: 'Scriptly 檔案', extensions: ['sly'] }]
+          filters: [
+            { name: 'Scriptly 檔案', extensions: ['sly'] },
+            { name: 'JSON 檔案', extensions: ['json'] },
+            { name: '所有檔案', extensions: ['*'] }
+          ]
         });
         if (result.canceled || !result.filePath) {
           return;
@@ -417,7 +421,11 @@ function App() {
       if (ipcRenderer && fs) {
         const result = await ipcRenderer.invoke('show-open-dialog', {
           properties: ['openFile'],
-          filters: [{ name: 'Scriptly 檔案', extensions: ['sly'] }]
+          filters: [
+            { name: 'Scriptly 檔案', extensions: ['sly'] },
+            { name: 'JSON 檔案', extensions: ['json'] },
+            { name: '所有檔案', extensions: ['*'] }
+          ]
         });
         
         if (result.canceled || result.filePaths.length === 0) {
