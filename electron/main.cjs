@@ -1,16 +1,33 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-// 設定應用程式名稱 (在 Dock 上顯示的名稱)
-if (process.platform === 'darwin') {
-  app.name = 'Scriptly';
-  try {
-    app.dock.setIcon(path.join(__dirname, '../public/icon.icon'));
-  } catch (e) {
-    console.warn("Electron native load image warning:", e);
+// 更新 Dock 圖示的函數
+function updateDockIcon() {
+  if (process.platform === 'darwin') {
+    app.name = 'Scriptly';
+    try {
+      // 根據深色/淺色模式選擇對應的圖示
+      // (目前 Electron 尚未正式支援 macOS 15 的「色調 (Tinted)」與「透明 (Clear)」API，
+      //  因此先以深淺色模式判斷，未來 Electron 更新後可擴充此邏輯)
+      const isDark = nativeTheme.shouldUseDarkColors;
+      const iconFileName = isDark ? 'icon-iOS-Dark-1024@1x.png' : 'icon-iOS-Default-1024@1x.png';
+      
+      const iconPath = path.join(__dirname, `../public/icons/${iconFileName}`);
+      app.dock.setIcon(iconPath);
+    } catch (e) {
+      console.warn("Electron native load image warning:", e);
+    }
   }
 }
+
+// 監聽系統外觀改變
+nativeTheme.on('updated', () => {
+  updateDockIcon();
+});
+
+// 初始設定圖示
+updateDockIcon();
 
 ipcMain.handle('export-pdf', async (event, title, htmlContent) => {
   return new Promise((resolve) => {
@@ -99,7 +116,7 @@ function createWindow() {
     height: 800,
     titleBarStyle: 'hidden',
     title: "Scriptly - 未命名劇本",
-    icon: path.join(__dirname, '../public/icon.icon'),
+    icon: path.join(__dirname, '../public/icons/icon-iOS-Default-1024@1x.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
