@@ -43,6 +43,10 @@ Scriptly 是一款**最適合華語劇本與中文劇本寫作的編輯應用程
 
 請根據你的作業系統下載對應的安裝檔，安裝完成後即可立即開始你的劇本創作之旅！
 
+不知道從何開始，您也可以先下載**範本**看看有什麼功能喔！
+
+👉 **[下載《雨夜的第九條命》 .sly檔](https://github.com/sutimlong/Scriptly/releases/download/v1.1.0/The.Ninth.Life.in.the.Rain_showcase.sly)** 👈
+
 ---
 
 ## 🛠️ 技術架構
