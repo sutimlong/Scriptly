@@ -68,57 +68,63 @@ export function usePagination(
       return;
     }
 
-    let pageContentY = 0;
-    let pages = 1;
-
+    // Pass 1: Clear custom pagination margins to measure natural flow
     for (const block of blocks) {
-      // offsetHeight ignores CSS scale, ensuring exact pagination regardless of zoom
+      if (block.style.marginBottom) {
+        block.style.marginBottom = '';
+      }
+    }
+
+    let currentPush = 0;
+    let pages = 1;
+    const marginsToSet: { block: HTMLElement; mb: string }[] = [];
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
       const blockH = block.offsetHeight;
-      let targetMarginTop = '';
+      const naturalTop = block.offsetTop;
+      const actualTop = naturalTop + currentPush;
+      const actualBottom = actualTop + blockH;
 
       // Auto-split super long paragraphs that span more than a full page
       if (blockH > CONTENT_HEIGHT + 10) {
-         try {
-           const slateNode = ReactEditor.toSlateNode(editor, block);
-           const path = ReactEditor.findPath(editor, slateNode);
-           // @ts-ignore
-           const text = slateNode.children ? slateNode.children.map(c => c.text).join('') : '';
-           const totalChars = text.length;
-           
-           if (totalChars > 0) {
-             const safeTargetHeight = Math.max(27, CONTENT_HEIGHT - 27);
-             const ratio = safeTargetHeight / blockH;
-             const splitChars = Math.max(1, Math.floor(totalChars * ratio));
-             const isScene = (slateNode as any).type === 'scene';
-             
-             // Queue the split to prevent React warnings during useLayoutEffect
-             Promise.resolve().then(() => {
-               autoSplitGiantBlock(path, editor, splitChars, isScene);
-             });
-           }
-         } catch(e) {}
+        try {
+          const slateNode = ReactEditor.toSlateNode(editor, block);
+          const path = ReactEditor.findPath(editor, slateNode);
+          // @ts-ignore
+          const text = slateNode.children ? slateNode.children.map((c: any) => c.text).join('') : '';
+          const totalChars = text.length;
+
+          if (totalChars > 0) {
+            const safeTargetHeight = Math.max(27, CONTENT_HEIGHT - 27);
+            const ratio = safeTargetHeight / blockH;
+            const splitChars = Math.max(1, Math.floor(totalChars * ratio));
+            const isScene = (slateNode as any).type === 'scene';
+
+            Promise.resolve().then(() => {
+              autoSplitGiantBlock(path, editor, splitChars, isScene);
+            });
+          }
+        } catch (e) {}
       }
 
-      if (pageContentY > 0 && pageContentY + blockH > CONTENT_HEIGHT) {
-        const remaining = CONTENT_HEIGHT - pageContentY;
-        const spacer = remaining + PAGE_PADDING_BOTTOM + PAGE_GAP + PAGE_PADDING_TOP;
-        targetMarginTop = `${spacer}px`;
-        pageContentY = blockH;
+      const pageEnd = (pages - 1) * (PAGE_HEIGHT_PX + PAGE_GAP) + PAGE_HEIGHT_PX - PAGE_PADDING_BOTTOM;
+
+      if (actualBottom > pageEnd) {
         pages++;
-      } else {
-        pageContentY += blockH;
-      }
+        const newPageStart = (pages - 1) * (PAGE_HEIGHT_PX + PAGE_GAP) + PAGE_PADDING_TOP;
+        const pushAmount = newPageStart - actualTop;
+        currentPush += pushAmount;
 
-      while (pageContentY > CONTENT_HEIGHT) {
-        pageContentY -= CONTENT_HEIGHT;
-        pages++;
+        if (i > 0) {
+          marginsToSet.push({ block: blocks[i - 1], mb: `${pushAmount}px` });
+        }
       }
+    }
 
-      // Only mutate the DOM if the margin actually needs to change.
-      // This prevents React/Slate from aborting IME composition during normal typing!
-      if (block.style.marginTop !== targetMarginTop) {
-        block.style.marginTop = targetMarginTop;
-      }
+    // Pass 2: Apply calculated margins
+    for (const { block, mb } of marginsToSet) {
+      block.style.marginBottom = mb;
     }
 
     setPageCount(pages);
